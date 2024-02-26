@@ -20,7 +20,9 @@ import {
   TextWrapping,
   Rect,
   SvgVisual,
-  PolylineEdgeStyle
+  PolylineEdgeStyle,
+  EdgeBundling,
+  Arrow
 } from 'yfiles'
 import { enableFolding } from './lib/FoldingSupport'
 import loadGraph from './lib/loadGraph'
@@ -57,8 +59,10 @@ function getContrastingColor(hexColor) {
 }
 
 const edgeStyle = new PolylineEdgeStyle({
-  stroke: '2px solid black'
+  stroke: '2px solid black',
+  targetArrow: new Arrow({ type: 'triangle', scale: 2, fill: 'black' }) // This adds arrows to the edges
 });
+
 
 
 async function initializeGraphComponent() {
@@ -79,11 +83,19 @@ async function initializeGraphComponent() {
       sourceSystems: [
         {
           name: "AccountingDB",
-          tables: ["Invoices", "Payments", "Budgets"]
+          tables: [
+            { name: "Invoices", connectsTo: ["Salaries", "Campaigns"] },
+            { name: "Payments", connectsTo: ["DealsClosed"] },
+            { name: "Budgets", connectsTo: ["Assets"] }
+          ]
         },
         {
           name: "PayrollDB",
-          tables: ["Salaries", "Bonuses", "Deductions"]
+          tables: [
+            { name: "Salaries", connectsTo: ["Employees"] },
+            { name: "Bonuses", connectsTo: [] },
+            { name: "Deductions", connectsTo: [] }
+          ]
         }
       ]
     },
@@ -92,11 +104,19 @@ async function initializeGraphComponent() {
       sourceSystems: [
         {
           name: "RecruitmentDB",
-          tables: ["Invoices", "Interviews", "Offers"]
+          tables: [
+            { name: "Candidates", connectsTo: ["Interviews"] },
+            { name: "Interviews", connectsTo: ["Offers", "Feedbacks"] },
+            { name: "Offers", connectsTo: [] }
+          ]
         },
         {
           name: "EmployeeDB",
-          tables: ["Employees", "Departments", "Positions"]
+          tables: [
+            { name: "Employees", connectsTo: ["Departments"] },
+            { name: "Departments", connectsTo: [] },
+            { name: "Positions", connectsTo: [] }
+          ]
         }
       ]
     },
@@ -105,15 +125,66 @@ async function initializeGraphComponent() {
       sourceSystems: [
         {
           name: "AssetManagementDB",
-          tables: ["Assets", "Licenses", "Vendors"]
+          tables: [
+            { name: "Assets", connectsTo: ["Licenses"] },
+            { name: "Licenses", connectsTo: [] },
+            { name: "Vendors", connectsTo: [] }
+          ]
         },
         {
           name: "SupportDB",
-          tables: ["Tickets", "ServiceLevels", "Customers"]
+          tables: [
+            { name: "Tickets", connectsTo: ["ServiceLevels"] },
+            { name: "ServiceLevels", connectsTo: ["Customers"] },
+            { name: "Customers", connectsTo: [] }
+          ]
+        }
+      ]
+    },
+    {
+      domain: "Marketing",
+      sourceSystems: [
+        {
+          name: "CampaignsDB",
+          tables: [
+            { name: "Campaigns", connectsTo: ["Leads"] },
+            { name: "Leads", connectsTo: ["Conversions"] },
+            { name: "Conversions", connectsTo: [] }
+          ]
+        },
+        {
+          name: "SocialMediaDB",
+          tables: [
+            { name: "Posts", connectsTo: ["Interactions"] },
+            { name: "Interactions", connectsTo: ["Followers"] },
+            { name: "Followers", connectsTo: [] }
+          ]
+        }
+      ]
+    },
+    {
+      domain: "Sales",
+      sourceSystems: [
+        {
+          name: "SalesDB",
+          tables: [
+            { name: "Opportunities", connectsTo: ["DealsClosed"] },
+            { name: "DealsClosed", connectsTo: ["Contacts"] },
+            { name: "Contacts", connectsTo: [] }
+          ]
+        },
+        {
+          name: "CustomerFeedbackDB",
+          tables: [
+            { name: "Feedbacks", connectsTo: ["Ratings"] },
+            { name: "Ratings", connectsTo: ["Improvements"] },
+            { name: "Improvements", connectsTo: [] }
+          ]
         }
       ]
     }
-  ]
+  ];
+  
   processData(graphComponent, data)
   return graphComponent
 }
@@ -123,10 +194,10 @@ function setupLabelStyles(graphComponent) {
     wrapping: TextWrapping.WORD_ELLIPSIS,
     horizontalTextAlignment: 'center',
     verticalTextAlignment: 'center',
-    autoFlip: false
-  })
-  graphComponent.graph.nodeDefaults.labels.style = labelStyle
-  graphComponent.graph.nodeDefaults.size = new Size(100, 50)
+    autoFlip: false,
+  });
+  graphComponent.graph.nodeDefaults.labels.style = labelStyle;
+  graphComponent.graph.nodeDefaults.size = new Size(100, 50);
 }
 
 const domainColor = getRandomColor()
@@ -136,45 +207,55 @@ function processData(graphComponent, data) {
   setupLabelStyles(graphComponent);
   const graph = graphComponent.graph;
   const labelModel = new InteriorLabelModel({ insets: 3 }).createParameter(InteriorLabelModelPosition.NORTH_EAST);
+  const nodeLookup = {}; // A lookup to find nodes by table name
+
+  const edgeStyle = new PolylineEdgeStyle({
+    stroke: '2px solid black',
+    targetArrow: new Arrow({ type: 'triangle', scale: 2, fill: 'black' }) // This adds arrows to the edges
+  });
+  graph.edgeDefaults.style = edgeStyle;
+
 
   data.forEach(domain => {
     const domainColor = getRandomColor();
     const domainTextColor = getContrastingColor(domainColor);
-    const DomainGroupStyleClass = createCustomGroupNodeStyle(domainColor);
-    const domainGroupStyle = new DomainGroupStyleClass();
+    const domainGroupStyle = createCustomGroupNodeStyle(domainColor);
 
     const domainGroupNode = graph.createGroupNode(null, new Rect(0, 0, 200, 100), domainGroupStyle);
-    // Corrected: Added label with the correct layout parameter and style parameter
-    graph.addLabel(domainGroupNode, domain.domain, labelModel, new DefaultLabelStyle({
-      textFill: domainTextColor,
-    }));
+    graph.addLabel(domainGroupNode, domain.domain, labelModel, new DefaultLabelStyle({ textFill: domainTextColor }));
 
     domain.sourceSystems.forEach(sourceSystem => {
       const systemColor = getRandomColor();
       const systemTextColor = getContrastingColor(systemColor);
-      const SystemGroupStyleClass = createCustomGroupNodeStyle(systemColor);
-      const systemGroupStyle = new SystemGroupStyleClass();
+      const systemGroupStyle = createCustomGroupNodeStyle(systemColor);
 
       const sourceSystemGroupNode = graph.createGroupNode(domainGroupNode, new Rect(0, 0, 180, 80), systemGroupStyle);
-      // Corrected: Added label with the correct layout parameter and style parameter
-      graph.addLabel(sourceSystemGroupNode, sourceSystem.name, labelModel, new DefaultLabelStyle({
-        textFill: systemTextColor,
-      }));
+      graph.addLabel(sourceSystemGroupNode, sourceSystem.name, labelModel, new DefaultLabelStyle({ textFill: systemTextColor }));
 
       sourceSystem.tables.forEach(table => {
-        const tableNode = graph.createNode(sourceSystemGroupNode, new Rect(0, 0, 160, 60), new ShapeNodeStyle({
-          fill: 'white',
-          stroke: 'black',
-        }));
-        
-        // const edgeToTable = graph.createEdge(sourceSystemGroupNode, tableNode);
-        // graph.setStyle(edgeToTable, edgeStyle);
-        const edgeToSystem = graph.createEdge(domainGroupNode, sourceSystemGroupNode);
-      graph.setStyle(edgeToSystem, edgeStyle);
-        // Corrected: Added label with the correct layout parameter and style parameter
-        graph.addLabel(tableNode, table, labelModel, new DefaultLabelStyle({
-          textFill: 'black',
-        }));
+        const tableNode = graph.createNode(sourceSystemGroupNode, new Rect(0, 0, 160, 60), new ShapeNodeStyle({ fill: 'white', stroke: 'black' }));
+        graph.addLabel(tableNode, table.name, labelModel, new DefaultLabelStyle({ textFill: 'black' }));
+
+        // Save node reference for connection creation
+        nodeLookup[table.name] = tableNode;
+      });
+    });
+  });
+
+  // After all nodes are created, create edges based on the connectsTo relationships
+  data.forEach(domain => {
+    domain.sourceSystems.forEach(sourceSystem => {
+      sourceSystem.tables.forEach(table => {
+        if (table.connectsTo) { // Ensure connectsTo property exists
+          table.connectsTo.forEach(targetTableName => {
+            const fromNode = nodeLookup[table.name];
+            const toNode = nodeLookup[targetTableName];
+            if (fromNode && toNode) {
+              const edge = graph.createEdge(fromNode, toNode);
+              graph.setStyle(edge, edgeStyle);
+            }
+          });
+        }
       });
     });
   });
@@ -185,7 +266,7 @@ function processData(graphComponent, data) {
 
 
 function createCustomGroupNodeStyle(fillColor) {
-  return class CustomGroupNodeStyle extends GroupNodeStyle {
+  return new class extends GroupNodeStyle {
     createVisual(context, groupNode) {
       const svgNamespace = 'http://www.w3.org/2000/svg';
       const visual = document.createElementNS(svgNamespace, 'g');
@@ -196,18 +277,19 @@ function createCustomGroupNodeStyle(fillColor) {
       visual.appendChild(rect);
       return new SvgVisual(visual);
     }
-
-    updateVisual(context, oldVisual, groupNode) {
-      // Implementation of updateVisual if necessary
-      return this.createVisual(context, groupNode);
-    }
-  };
+  }();
 }
 
 function applyHierarchicLayout(graphComponent) {
-  const layout = new HierarchicLayout()
-  layout.integratedEdgeLabeling = true
-  graphComponent.morphLayout(layout, '1s')
+  const layout = new HierarchicLayout();
+
+  // Configure edge bundling
+  const bundling = new EdgeBundling();
+  bundling.bundlingStrength = 0.95; // Adjust the strength as needed (0..1)
+  layout.edgeBundling = bundling;
+
+  layout.integratedEdgeLabeling = true;
+  graphComponent.morphLayout(layout, '1s');
 }
 
 function initializeToolbar(graphComponent) {
