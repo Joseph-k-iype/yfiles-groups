@@ -1,24 +1,48 @@
-result = []
-for domain in df['domain'].unique():
-    domain_dict = {"domain": domain, "sourceSystems": []}
-    domain_df = df[df['domain'] == domain]
-    
-    for sourceSystem in domain_df['sourceSystem'].unique():
-        sourceSystem_dict = {"name": sourceSystem, "tables": []}
-        sourceSystem_df = domain_df[domain_df['sourceSystem'] == sourceSystem]
-        
-        for _, row in sourceSystem_df.iterrows():
-            table_dict = {"name": row['table'], "connectsTo": []}
-            
-            # Finding tables this table connects to
-            # Excludes tables from the same source system
-            connects_to_df = df[(df['domain'] != domain) | (df['sourceSystem'] != sourceSystem)]
-            table_dict['connectsTo'] = connects_to_df['table'].tolist()
-            
-            sourceSystem_dict['tables'].append(table_dict)
-        
-        domain_dict['sourceSystems'].append(sourceSystem_dict)
-    
-    result.append(domain_dict)
+import pandas as pd
+import json
 
-result
+# Sample data
+data = [
+    {"table": "Invoices", "sourceSystem": "AccountingDB", "domain": "Finance"},
+    {"table": "Payments", "sourceSystem": "AccountingDB", "domain": "Finance"},
+    {"table": "Salaries", "sourceSystem": "PayrollDB", "domain": "Finance"},
+    {"table": "Bonuses", "sourceSystem": "PayrollDB", "domain": "Finance"},
+    {"table": "Candidates", "sourceSystem": "RecruitmentDB", "domain": "HR"},
+    {"table": "Interviews", "sourceSystem": "RecruitmentDB", "domain": "HR"},
+    {"table": "Assets", "sourceSystem": "AssetManagementDB", "domain": "IT"},
+    {"table": "Licenses", "sourceSystem": "AssetManagementDB", "domain": "IT"},
+]
+
+# Convert to DataFrame
+df = pd.DataFrame(data)
+
+# Initialize an empty list for the final structured data
+structured_data = []
+
+# Group by domain
+for domain, domain_group in df.groupby('domain'):
+    domain_dict = {"domain": domain, "sourceSystems": []}
+    
+    # Group by source system within each domain
+    for source_system, source_group in domain_group.groupby('sourceSystem'):
+        source_system_dict = {"name": source_system, "tables": []}
+        
+        # List of all other source systems in the domain for the connectsTo field
+        other_source_systems = domain_group['sourceSystem'].unique().tolist()
+        other_source_systems.remove(source_system)
+        
+        # Add table details
+        for _, row in source_group.iterrows():
+            table_dict = {
+                "name": row['table'],
+                "connectsTo": other_source_systems  # Connects to other source systems in the domain
+            }
+            source_system_dict["tables"].append(table_dict)
+            
+        domain_dict["sourceSystems"].append(source_system_dict)
+    
+    structured_data.append(domain_dict)
+
+# Convert structured data to JSON
+json_data = json.dumps(structured_data, indent=2)
+json_data
