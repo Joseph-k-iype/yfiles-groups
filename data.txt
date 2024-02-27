@@ -1,54 +1,24 @@
-from collections import defaultdict
-
-# Sample data structure emulating SPARQL query results
-data = [
-    {"table": "Invoices", "sourceSystem": "AccountingDB", "domain": "Finance"},
-    {"table": "Payments", "sourceSystem": "AccountingDB", "domain": "Finance"},
-    {"table": "Salaries", "sourceSystem": "PayrollDB", "domain": "Finance"},
-    {"table": "Bonuses", "sourceSystem": "PayrollDB", "domain": "Finance"},
-    {"table": "Candidates", "sourceSystem": "RecruitmentDB", "domain": "HR"},
-    {"table": "Interviews", "sourceSystem": "RecruitmentDB", "domain": "HR"},
-    {"table": "Assets", "sourceSystem": "AssetManagementDB", "domain": "IT"},
-    {"table": "Licenses", "sourceSystem": "AssetManagementDB", "domain": "IT"},
-]
-
-# Function to simulate mapping of 'connectsTo' based on source systems
-def map_tables_to_source_systems(data):
-    source_system_to_table = {}
-    for entry in data:
-        if entry["sourceSystem"] not in source_system_to_table:
-            source_system_to_table[entry["sourceSystem"]] = []
-        source_system_to_table[entry["sourceSystem"]].append(entry["table"])
-
-    table_to_connects = {}
-    for entry in data:
-        connected_tables = []
-        for ss, tables in source_system_to_table.items():
-            if ss != entry["sourceSystem"]:  # Avoid connecting within the same source system
-                connected_tables.extend(tables)
-        table_to_connects[entry["table"]] = connected_tables
-
-    return table_to_connects
-
-# Mapping 'connectsTo'
-table_to_connects = map_tables_to_source_systems(data)
-for entry in data:
-    entry["connectsTo"] = table_to_connects[entry["table"]]
-
-# Structuring the data into the desired format
-final_structure = defaultdict(lambda: defaultdict(lambda: {"tables": []}))
-for entry in data:
-    domain_entry = final_structure[entry["domain"]]
-    source_system_entry = domain_entry[entry["sourceSystem"]]
-    source_system_entry["tables"].append({"name": entry["table"], "connectsTo": entry["connectsTo"]})
-
-# Convert defaultdict to regular dict for serialization
-output = []
-for domain, source_systems in final_structure.items():
+result = []
+for domain in df['domain'].unique():
     domain_dict = {"domain": domain, "sourceSystems": []}
-    for source_system, details in source_systems.items():
-        domain_dict["sourceSystems"].append({"name": source_system, **details})
-    output.append(domain_dict)
+    domain_df = df[df['domain'] == domain]
+    
+    for sourceSystem in domain_df['sourceSystem'].unique():
+        sourceSystem_dict = {"name": sourceSystem, "tables": []}
+        sourceSystem_df = domain_df[domain_df['sourceSystem'] == sourceSystem]
+        
+        for _, row in sourceSystem_df.iterrows():
+            table_dict = {"name": row['table'], "connectsTo": []}
+            
+            # Finding tables this table connects to
+            # Excludes tables from the same source system
+            connects_to_df = df[(df['domain'] != domain) | (df['sourceSystem'] != sourceSystem)]
+            table_dict['connectsTo'] = connects_to_df['table'].tolist()
+            
+            sourceSystem_dict['tables'].append(table_dict)
+        
+        domain_dict['sourceSystems'].append(sourceSystem_dict)
+    
+    result.append(domain_dict)
 
-# Show the constructed output for validation
-output
+result
